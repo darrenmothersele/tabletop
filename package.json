@@ -26,11 +26,11 @@
     "grunt-contrib-uglify": "^2.0.0",
     "jshint-stylish": "^2.0.0",
     "mocha": "^6.2.1",
-    "uglifyjs": "^2.4.10"
-  },
-  "dependencies": {
+    "uglifyjs": "^2.4.10",
     "lodash": "^4.17.12",
     "request": "^2.51.0"
+  },
+  "dependencies": {
   },
   "engines": {
     "node": ">=0.10.0"

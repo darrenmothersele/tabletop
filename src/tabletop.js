@@ -1,15 +1,6 @@
 (function() {
   'use strict';
 
-  var inNodeJS = typeof process !== 'undefined' && !process.browser;
-
-  var request = function requestNotProvided() {
-    throw new Error("The 'request' module is only available while running in Node.");
-  };
-  if(inNodeJS) { // This will get stripped out by Uglify, and Webpack will not include it
-    request = require('request');
-  }
-
   var supportsCORS = false;
   var inLegacyIE = false;
   try {
@@ -134,7 +125,7 @@
 
     this.baseJsonPath = '/feeds/worksheets/' + this.key + '/' + this.sheetPrivacy +'/basic?alt=';
 
-    if (inNodeJS || supportsCORS) {
+    if (supportsCORS) {
       this.baseJsonPath += 'json';
     } else {
       this.baseJsonPath += 'json-in-script';
@@ -143,7 +134,7 @@
     if (this.authkey) {
       this.baseJsonPath += '&oauth_token=' + this.authkey;
     }
-  
+
     if(!this.wait) {
       return this.fetch();
     }
@@ -181,23 +172,18 @@
 
     /*
       This will call the environment appropriate request method.
-
       In browser it will use JSON-P, in node it will use request()
     */
     requestData: function(path, callback) {
       this.log('Requesting', path);
       this.encounteredError = false;
-      if (inNodeJS) {
-        this.serverSideFetch(path, callback);
+      //CORS only works in IE8/9 across the same protocol
+      //You must have your server on HTTPS to talk to Google, or it'll fall back on injection
+      var protocol = this.endpoint.split('//').shift() || 'http';
+      if (supportsCORS && (!inLegacyIE || protocol === location.protocol)) {
+        this.xhrFetch(path, callback);
       } else {
-        //CORS only works in IE8/9 across the same protocol
-        //You must have your server on HTTPS to talk to Google, or it'll fall back on injection
-        var protocol = this.endpoint.split('//').shift() || 'http';
-        if (supportsCORS && (!inLegacyIE || protocol === location.protocol)) {
-          this.xhrFetch(path, callback);
-        } else {
-          this.injectScript(path, callback);
-        }
+        this.injectScript(path, callback);
       }
     },
 
@@ -228,7 +214,6 @@
       Insert the URL into the page as a script tag. Once it's loaded the spreadsheet data
       it triggers the callback. This helps you avoid cross-domain errors
       http://code.google.com/apis/gdata/samples/spreadsheet_sample.html
-
       Let's be plain-Jane and not use jQuery or anything.
     */
     injectScript: function(path, callback) {
@@ -279,21 +264,6 @@
     },
 
     /*
-      This will only run if tabletop is being run in node.js
-    */
-    serverSideFetch: function(path, callback) {
-      var self = this;
-
-      this.log('Fetching', this.endpoint + path);
-      request({url: this.endpoint + path, json: true}, function(err, resp, body) {
-        if (err) {
-          return console.error(err);
-        }
-        callback.call(self, body);
-      });
-    },
-
-    /*
       Is this a sheet you want to pull?
       If { wanted: ["Sheet1"] } has been specified, only Sheet1 is imported
       Pulls all sheets if none are specified
@@ -341,7 +311,6 @@
       Need to use injectScript because the worksheet view that you're working from
       doesn't actually include the data. The list-based feed (/feeds/list/key..) does, though.
       Calls back to loadSheet in order to get the real work done.
-
       Used as a callback for the worksheet-based JSON
     */
     loadSheets: function(data) {
@@ -362,7 +331,7 @@
           var linkIdx = data.feed.entry[i].link.length-1;
           var sheetId = data.feed.entry[i].link[linkIdx].href.split('/').pop();
           var jsonPath = '/feeds/list/' + this.key + '/' + sheetId + '/' + this.sheetPrivacy + '/values?alt=';
-          if (inNodeJS || supportsCORS) {
+          if (supportsCORS) {
             jsonPath += 'json';
           } else {
             jsonPath += 'json-in-script';
@@ -422,7 +391,6 @@
 
     /*
       Parse a single list-based worksheet, turning it into a Tabletop Model
-
       Used as a callback for the list-based JSON
     */
     loadSheet: function(data) {
@@ -463,7 +431,6 @@
   /*
     Tabletop.Model stores the attribute names and parses the worksheet data
       to turn it into something worthwhile
-
     Options should be in the format { data: XXX }, with XXX being the list-based worksheet
   */
   Tabletop.Model = function(options) {
@@ -589,8 +556,8 @@
      */
     prettifyElements: function() {
       var prettyElements = [],
-          orderedPrettyNames = [],
-          i, j, ilen, jlen;
+        orderedPrettyNames = [],
+        i, j, ilen, jlen;
 
       for (j = 0, jlen = this.columnNames.length; j < jlen ; j++) {
         orderedPrettyNames.push(this.prettyColumns[this.columnNames[j]]);
@@ -613,7 +580,7 @@
     */
     toArray: function() {
       var array = [],
-          i, j, ilen, jlen;
+        i, j, ilen, jlen;
       for (i = 0, ilen = this.elements.length; i < ilen; i++) {
         var row = [];
         for (j = 0, jlen = this.columnNames.length; j < jlen ; j++) {
